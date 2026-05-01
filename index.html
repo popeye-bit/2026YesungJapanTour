@@ -7,7 +7,6 @@
 
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 
   <style>
     body { background:#fff; }
@@ -56,7 +55,6 @@
 
 <script>
 
-// ---------- Data ----------
 let data = JSON.parse(localStorage.getItem('planner') || JSON.stringify({ days:[{name:'Day 1',items:[]}] }));
 let currentDay = 0;
 let editIndex = null;
@@ -70,15 +68,24 @@ function renderTabs(){
   el.innerHTML='';
 
   data.days.forEach((d,i)=>{
-    const input=document.createElement('input');
-    input.value=d.name;
-    input.className=`px-2 py-1 border text-sm ${i===currentDay?'bg-black text-white':'bg-white'}`;
+    const btn=document.createElement('button');
+    btn.textContent=d.name;
+    btn.className=`px-3 py-1 border text-sm ${i===currentDay?'bg-black text-white':'bg-white'}`;
 
-    input.onchange=e=>{d.name=e.target.value;save();};
-    input.onclick=()=>{currentDay=i;render();};
-
-    el.appendChild(input);
+    btn.onclick=()=>{currentDay=i;render();};
+    el.appendChild(btn);
   });
+}
+
+function moveItem(index, direction){
+  const arr = data.days[currentDay].items;
+  const newIndex = index + direction;
+
+  if(newIndex < 0 || newIndex >= arr.length) return;
+
+  [arr[index], arr[newIndex]] = [arr[newIndex], arr[index]];
+  save();
+  render();
 }
 
 function render(){
@@ -91,7 +98,7 @@ function render(){
 
   data.days[currentDay].items.forEach((item,i)=>{
     const div=document.createElement('div');
-    div.className='card flex gap-3 p-3 border-b';
+    div.className='card flex gap-3 p-3 border-b items-center';
 
     const transportHTML = item.transport?.trim()
       ? `<div class="text-xs muted">🚗 ${item.transport}</div>`
@@ -121,7 +128,9 @@ function render(){
         ${navHTML}
       </div>
 
-      <div class="text-xs flex flex-col gap-1">
+      <div class="flex flex-col gap-1 text-xs">
+        <button onclick="moveItem(${i}, -1)">↑</button>
+        <button onclick="moveItem(${i}, 1)">↓</button>
         <button onclick="openModal(${i})">編輯</button>
         <button onclick="deleteItem(${i})">刪</button>
       </div>
@@ -131,13 +140,6 @@ function render(){
   });
 
   box.appendChild(list);
-
-  Sortable.create(list,{animation:150,onEnd:e=>{
-    const arr=data.days[currentDay].items;
-    const moved=arr.splice(e.oldIndex,1)[0];
-    arr.splice(e.newIndex,0,moved);
-    save();render();
-  }});
 
   const add=document.createElement('button');
   add.className='w-full mt-3 border py-2';
@@ -152,12 +154,15 @@ function openMap(q){
 
 function addDay(){
   data.days.push({name:`Day ${data.days.length+1}`,items:[]});
-  save();render();
+  currentDay = data.days.length - 1;
+  save();
+  render();
 }
 
 function deleteItem(i){
   data.days[currentDay].items.splice(i,1);
-  save();render();
+  save();
+  render();
 }
 
 function openModal(i=null){
@@ -186,7 +191,9 @@ function saveModal(){
   if(editIndex!==null) data.days[currentDay].items[editIndex]=obj;
   else data.days[currentDay].items.push(obj);
 
-  save();closeModal();render();
+  save();
+  closeModal();
+  render();
 }
 
 function exportImage(){
@@ -208,3 +215,4 @@ render();
 
 </body>
 </html>
+
