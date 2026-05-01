@@ -1,216 +1,209 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>2026藝聲日巡行程表</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2026藝聲日巡｜大阪、名古屋行程表</title>
 
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
 
-  <style>
-    body { background:#fff; }
-    .card { touch-action: manipulation; }
-    .muted { color:#6b7280; }
-  </style>
+<style>
+body{background:#fff;}
+.muted{color:#6b7280;}
+</style>
 </head>
 
 <body class="text-black">
 
 <div class="max-w-3xl mx-auto p-4">
 
-  <div class="flex justify-between items-center mb-3">
-    <h1 class="text-lg font-semibold">2026藝聲日巡｜大阪、名古屋行程表</h1>
-  </div>
+<h1 class="text-lg font-semibold mb-3">
+2026藝聲日巡｜大阪、名古屋行程表
+</h1>
 
-  <div id="dayTabs" class="flex gap-2 overflow-x-auto mb-3"></div>
-  <button onclick="addDay()" class="mb-3 px-3 py-1 border">+ 新增天數</button>
+<div id="status" class="text-xs muted mb-2">同步中...</div>
 
-  <div id="planner" class="border rounded-xl p-3"></div>
+<div id="dayTabs" class="flex gap-2 mb-3 overflow-x-auto"></div>
+<button onclick="addDay()" class="mb-3 px-3 py-1 border">+ 新增天數</button>
 
-  <div class="flex gap-2 mt-4">
-    <button onclick="exportImage()" class="flex-1 border py-2">匯出當天</button>
-    <button onclick="exportAll()" class="flex-1 border py-2">匯出全部</button>
-  </div>
+<div id="planner" class="border rounded-xl p-3"></div>
 
-</div>
-
-<!-- Modal -->
-<div id="modal" class="fixed inset-0 hidden items-center justify-center bg-black/40 p-4">
-  <div class="bg-white w-full max-w-sm p-4 border space-y-2">
-
-    <input id="mLoc" placeholder="地點（Google Maps）" class="w-full p-2 border" />
-    <input id="mTime" placeholder="時間" class="w-full p-2 border" />
-    <input id="mTitle" placeholder="景點" class="w-full p-2 border" />
-    <input id="mTransport" placeholder="前往方式" class="w-full p-2 border" />
-    <input id="mNote" placeholder="備註" class="w-full p-2 border" />
-
-    <div class="flex gap-2">
-      <button onclick="saveModal()" class="flex-1 border py-2">儲存</button>
-      <button onclick="closeModal()" class="flex-1 border py-2">取消</button>
-    </div>
-
-  </div>
 </div>
 
 <script>
 
-let data = JSON.parse(localStorage.getItem('planner') || JSON.stringify({ days:[{name:'Day 1',items:[]}] }));
-let currentDay = 0;
-let editIndex = null;
+// ====== 🔑 填你的 Supabase ======
+const SUPABASE_URL = "你的URL";
+const SUPABASE_KEY = "你的KEY";
 
-function save(){
-  localStorage.setItem('planner', JSON.stringify(data));
+// ====== DATA ======
+let data = { days:[{name:'Day 1',items:[]}] };
+let currentDay = 0;
+
+// ====== CLOUD LOAD ======
+async function loadCloud(){
+  try{
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/planner?id=eq.yesung2026`,{
+      headers:{
+        apikey:SUPABASE_KEY,
+        Authorization:"Bearer "+SUPABASE_KEY
+      }
+    });
+
+    const json = await res.json();
+    if(json.length && json[0].data){
+      data = json[0].data;
+      status("已同步（雲端）");
+    }else{
+      await saveCloud();
+    }
+  }catch(e){
+    status("離線模式");
+  }
 }
 
+// ====== CLOUD SAVE ======
+async function saveCloud(){
+  try{
+    await fetch(`${SUPABASE_URL}/rest/v1/planner?id=eq.yesung2026`,{
+      method:"PATCH",
+      headers:{
+        apikey:SUPABASE_KEY,
+        Authorization:"Bearer "+SUPABASE_KEY,
+        "Content-Type":"application/json"
+      },
+      body:JSON.stringify({data})
+    });
+    status("已同步");
+  }catch(e){
+    status("同步失敗");
+  }
+}
+
+function status(t){
+  document.getElementById("status").innerText = "同步狀態："+t;
+}
+
+// ====== SAVE ======
+function save(){
+  saveCloud();
+  render();
+}
+
+// ====== UI ======
 function renderTabs(){
-  const el=document.getElementById('dayTabs');
-  el.innerHTML='';
+  const el=document.getElementById("dayTabs");
+  el.innerHTML="";
 
   data.days.forEach((d,i)=>{
-    const btn=document.createElement('button');
+    const btn=document.createElement("button");
     btn.textContent=d.name;
-    btn.className=`px-3 py-1 border text-sm ${i===currentDay?'bg-black text-white':'bg-white'}`;
-
-    btn.onclick=()=>{currentDay=i;render();};
+    btn.className=`px-3 py-1 border ${i===currentDay?'bg-black text-white':''}`;
+    btn.onclick=()=>{currentDay=i;render();}
     el.appendChild(btn);
   });
-}
-
-function moveItem(index, direction){
-  const arr = data.days[currentDay].items;
-  const newIndex = index + direction;
-
-  if(newIndex < 0 || newIndex >= arr.length) return;
-
-  [arr[index], arr[newIndex]] = [arr[newIndex], arr[index]];
-  save();
-  render();
 }
 
 function render(){
   renderTabs();
 
-  const box=document.getElementById('planner');
-  box.innerHTML='';
-
-  const list=document.createElement('div');
+  const box=document.getElementById("planner");
+  box.innerHTML="";
 
   data.days[currentDay].items.forEach((item,i)=>{
-    const div=document.createElement('div');
-    div.className='card flex gap-3 p-3 border-b items-center';
 
-    const transportHTML = item.transport?.trim()
-      ? `<div class="text-xs muted">🚗 ${item.transport}</div>`
-      : '';
+    const div=document.createElement("div");
+    div.className="flex gap-3 p-3 border-b";
 
-    const noteHTML = item.note?.trim()
-      ? `<div class="text-xs muted">${item.note}</div>`
-      : '';
-
-    const navHTML = item.loc?.trim()
-      ? `<button onclick="openMap('${item.loc}')" class="text-xs underline">導航</button>`
-      : '';
-
-    const titleHTML = item.title?.trim()
-      ? `<div class="font-semibold text-sm">${item.title}</div>`
-      : '';
+    const transport = item.transport ? `<div class="text-xs muted">🚗 ${item.transport}</div>` : "";
+    const note = item.note ? `<div class="text-xs muted">${item.note}</div>` : "";
+    const nav = item.loc ? `<button onclick="openMap('${item.loc}')" class="text-xs underline">導航</button>` : "";
 
     div.innerHTML=`
-      <div class="w-14 h-14 border flex items-center justify-center text-xs font-semibold">
-        ${item.time || '--:--'}
+      <div class="w-14 h-14 border flex items-center justify-center text-xs">
+        ${item.time||'--:--'}
       </div>
 
       <div class="flex-1">
-        ${titleHTML}
-        ${transportHTML}
-        ${noteHTML}
-        ${navHTML}
+        ${item.title||''}
+        ${transport}
+        ${note}
+        ${nav}
       </div>
 
-      <div class="flex flex-col gap-1 text-xs">
-        <button onclick="moveItem(${i}, -1)">↑</button>
-        <button onclick="moveItem(${i}, 1)">↓</button>
-        <button onclick="openModal(${i})">編輯</button>
-        <button onclick="deleteItem(${i})">刪</button>
+      <div class="text-xs">
+        <button onclick="move(${i},-1)">↑</button>
+        <button onclick="move(${i},1)">↓</button>
+        <button onclick="edit(${i})">編輯</button>
+        <button onclick="del(${i})">刪</button>
       </div>
     `;
 
-    list.appendChild(div);
+    box.appendChild(div);
   });
 
-  box.appendChild(list);
+  const btn=document.createElement("button");
+  btn.className="w-full mt-3 border py-2";
+  btn.textContent="+ 新增行程";
+  btn.onclick=add;
+  box.appendChild(btn);
+}
 
-  const add=document.createElement('button');
-  add.className='w-full mt-3 border py-2';
-  add.textContent='+ 新增行程';
-  add.onclick=()=>openModal();
-  box.appendChild(add);
+// ====== ACTION ======
+function addDay(){
+  data.days.push({name:`Day ${data.days.length+1}`,items:[]});
+  currentDay=data.days.length-1;
+  save();
+}
+
+function add(){
+  const time=prompt("時間");
+  const title=prompt("景點");
+  const loc=prompt("地點");
+  const transport=prompt("前往方式");
+  const note=prompt("備註");
+
+  data.days[currentDay].items.push({time,title,loc,transport,note});
+  save();
+}
+
+function edit(i){
+  const it=data.days[currentDay].items[i];
+
+  it.time=prompt("時間",it.time);
+  it.title=prompt("景點",it.title);
+  it.loc=prompt("地點",it.loc);
+  it.transport=prompt("前往方式",it.transport);
+  it.note=prompt("備註",it.note);
+
+  save();
+}
+
+function del(i){
+  data.days[currentDay].items.splice(i,1);
+  save();
+}
+
+function move(i,d){
+  const arr=data.days[currentDay].items;
+  const ni=i+d;
+  if(ni<0||ni>=arr.length)return;
+  [arr[i],arr[ni]]=[arr[ni],arr[i]];
+  save();
 }
 
 function openMap(q){
-  window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`);
+  window.open(`https://maps.google.com/?q=${encodeURIComponent(q)}`);
 }
 
-function addDay(){
-  data.days.push({name:`Day ${data.days.length+1}`,items:[]});
-  currentDay = data.days.length - 1;
-  save();
+// ====== INIT ======
+async function init(){
+  await loadCloud();
   render();
 }
 
-function deleteItem(i){
-  data.days[currentDay].items.splice(i,1);
-  save();
-  render();
-}
+init();
 
-function openModal(i=null){
-  editIndex=i;
-  modal.classList.remove('hidden');
-
-  const it=data.days[currentDay].items[i]||{};
-  mLoc.value=it.loc||'';
-  mTime.value=it.time||'';
-  mTitle.value=it.title||'';
-  mTransport.value=it.transport||'';
-  mNote.value=it.note||'';
-}
-
-function closeModal(){modal.classList.add('hidden');}
-
-function saveModal(){
-  const obj={
-    loc:mLoc.value,
-    time:mTime.value,
-    title:mTitle.value,
-    transport:mTransport.value,
-    note:mNote.value
-  };
-
-  if(editIndex!==null) data.days[currentDay].items[editIndex]=obj;
-  else data.days[currentDay].items.push(obj);
-
-  save();
-  closeModal();
-  render();
-}
-
-function exportImage(){
-  html2canvas(document.getElementById('planner')).then(c=>{
-    const a=document.createElement('a');
-    a.href=c.toDataURL();a.download='day.png';a.click();
-  });
-}
-
-function exportAll(){
-  html2canvas(document.body).then(c=>{
-    const a=document.createElement('a');
-    a.href=c.toDataURL();a.download='trip.png';a.click();
-  });
-}
-
-render();
 </script>
 
 </body>
