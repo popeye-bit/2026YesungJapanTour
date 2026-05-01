@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>2026藝聲日巡｜大阪、名古屋行程表</title>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>2026藝聲日巡行程表</title>
 
 <script src="https://cdn.tailwindcss.com"></script>
 
@@ -17,11 +17,11 @@ body{background:#fff;}
 
 <div class="max-w-3xl mx-auto p-4">
 
-<h1 class="text-lg font-semibold mb-3">
+<h1 class="text-lg font-semibold mb-2">
 2026藝聲日巡｜大阪、名古屋行程表
 </h1>
 
-<div id="status" class="text-xs muted mb-2">同步中...</div>
+<div id="status" class="text-xs muted mb-3">初始化中...</div>
 
 <div id="dayTabs" class="flex gap-2 mb-3 overflow-x-auto"></div>
 <button onclick="addDay()" class="mb-3 px-3 py-1 border">+ 新增天數</button>
@@ -32,15 +32,30 @@ body{background:#fff;}
 
 <script>
 
-// ====== 🔑 填你的 Supabase ======
-const SUPABASE_URL = https://bfevhezngiswpgpajrst.supabase.co/rest/v1/";
+/* =========================
+   🔑 SUPABASE 設定（必填）
+========================= */
+const SUPABASE_URL = "https://bfevhezngiswpgpajrst.supabase.co/rest/v1/";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJmZXZoZXpuZ2lzd3BncGFqcnN0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2NTMzOTEsImV4cCI6MjA5MzIyOTM5MX0.X8afOg08mh_eg_dUQh665rfzWTIGR4eFxoYAU1QlC5Q";
 
-// ====== DATA ======
-let data = { days:[{name:'Day 1',items:[]}] };
+/* =========================
+   📦 資料
+========================= */
+let data = { days:[{name:"Day 1",items:[]}] };
 let currentDay = 0;
 
-// ====== CLOUD LOAD ======
+let syncTimer;
+
+/* =========================
+   🌐 狀態顯示
+========================= */
+function status(t){
+  document.getElementById("status").innerText = "同步：" + t;
+}
+
+/* =========================
+   ☁️ 讀雲端
+========================= */
 async function loadCloud(){
   try{
     const res = await fetch(`${SUPABASE_URL}/rest/v1/planner?id=eq.yesung2026`,{
@@ -51,18 +66,22 @@ async function loadCloud(){
     });
 
     const json = await res.json();
+
     if(json.length && json[0].data){
       data = json[0].data;
-      status("已同步（雲端）");
+      status("已載入雲端");
     }else{
       await saveCloud();
     }
+
   }catch(e){
     status("離線模式");
   }
 }
 
-// ====== CLOUD SAVE ======
+/* =========================
+   ☁️ 存雲端
+========================= */
 async function saveCloud(){
   try{
     await fetch(`${SUPABASE_URL}/rest/v1/planner?id=eq.yesung2026`,{
@@ -74,36 +93,34 @@ async function saveCloud(){
       },
       body:JSON.stringify({data})
     });
+
     status("已同步");
+
   }catch(e){
     status("同步失敗");
   }
 }
 
-function status(t){
-  document.getElementById("status").innerText = "同步狀態："+t;
-}
-
-// ====== SAVE ======
-let syncTimer;
-
+/* =========================
+   💾 save（重點優化版）
+========================= */
 function save(){
-  // 1️⃣ 先存本機（超快，不會卡）
-  localStorage.setItem('planner', JSON.stringify(data));
 
-  // 2️⃣ 更新狀態提示
+  // 本機先存（不卡）
+  localStorage.setItem("planner", JSON.stringify(data));
+
   status("等待同步...");
 
-  // 3️⃣ 清掉上一次的延遲同步
   clearTimeout(syncTimer);
 
-  // 4️⃣ 延遲 1.2 秒後才打雲端（避免卡頓）
-  syncTimer = setTimeout(async () => {
-    await saveCloud();
+  syncTimer = setTimeout(()=>{
+    saveCloud();
   }, 1200);
 }
 
-// ====== UI ======
+/* =========================
+   🧭 Tabs
+========================= */
 function renderTabs(){
   const el=document.getElementById("dayTabs");
   el.innerHTML="";
@@ -111,12 +128,15 @@ function renderTabs(){
   data.days.forEach((d,i)=>{
     const btn=document.createElement("button");
     btn.textContent=d.name;
-    btn.className=`px-3 py-1 border ${i===currentDay?'bg-black text-white':''}`;
+    btn.className=`px-3 py-1 border text-sm ${i===currentDay?'bg-black text-white':''}`;
     btn.onclick=()=>{currentDay=i;render();}
     el.appendChild(btn);
   });
 }
 
+/* =========================
+   📱 render
+========================= */
 function render(){
   renderTabs();
 
@@ -134,17 +154,17 @@ function render(){
 
     div.innerHTML=`
       <div class="w-14 h-14 border flex items-center justify-center text-xs">
-        ${item.time||'--:--'}
+        ${item.time||"--:--"}
       </div>
 
       <div class="flex-1">
-        ${item.title||''}
+        <div class="font-medium">${item.title||""}</div>
         ${transport}
         ${note}
         ${nav}
       </div>
 
-      <div class="text-xs">
+      <div class="text-xs flex flex-col">
         <button onclick="move(${i},-1)">↑</button>
         <button onclick="move(${i},1)">↓</button>
         <button onclick="edit(${i})">編輯</button>
@@ -162,13 +182,18 @@ function render(){
   box.appendChild(btn);
 }
 
-// ====== ACTION ======
+/* =========================
+   ➕ 新增天數
+========================= */
 function addDay(){
   data.days.push({name:`Day ${data.days.length+1}`,items:[]});
   currentDay=data.days.length-1;
   save();
 }
 
+/* =========================
+   ➕ 新增行程
+========================= */
 function add(){
   const time=prompt("時間");
   const title=prompt("景點");
@@ -180,6 +205,9 @@ function add(){
   save();
 }
 
+/* =========================
+   ✏️ 編輯
+========================= */
 function edit(i){
   const it=data.days[currentDay].items[i];
 
@@ -192,25 +220,41 @@ function edit(i){
   save();
 }
 
+/* =========================
+   ❌ 刪除
+========================= */
 function del(i){
   data.days[currentDay].items.splice(i,1);
   save();
 }
 
+/* =========================
+   🔼🔽 排序
+========================= */
 function move(i,d){
   const arr=data.days[currentDay].items;
   const ni=i+d;
   if(ni<0||ni>=arr.length)return;
+
   [arr[i],arr[ni]]=[arr[ni],arr[i]];
   save();
 }
 
+/* =========================
+   🗺 Google Maps
+========================= */
 function openMap(q){
   window.open(`https://maps.google.com/?q=${encodeURIComponent(q)}`);
 }
 
-// ====== INIT ======
+/* =========================
+   🚀 初始化
+========================= */
 async function init(){
+
+  const local = localStorage.getItem("planner");
+  if(local) data = JSON.parse(local);
+
   await loadCloud();
   render();
 }
@@ -221,3 +265,4 @@ init();
 
 </body>
 </html>
+
