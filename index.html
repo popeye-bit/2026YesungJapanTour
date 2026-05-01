@@ -13,10 +13,9 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 
-  <!-- Firebase -->
+  <!-- Firebase (Cloud Sync) -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 
   <style>
     body { background:#fff; }
@@ -32,8 +31,6 @@
   <div class="flex justify-between items-center mb-3">
     <h1 class="text-lg font-semibold">2026藝聲日巡｜大阪、名古屋行程表</h1>
   </div>
-
-  <div id="status" class="text-xs muted mb-2">同步狀態：連線中...</div>
 
   <div id="dayTabs" class="flex gap-2 overflow-x-auto mb-3"></div>
   <button onclick="addDay()" class="mb-3 px-3 py-1 border">+ 新增天數</button>
@@ -51,7 +48,7 @@
 <div id="modal" class="fixed inset-0 hidden items-center justify-center bg-black/40 p-4">
   <div class="bg-white w-full max-w-sm p-4 border space-y-2">
 
-    <input id="mLoc" placeholder="地點（Google Maps）" class="w-full p-2 border" />
+    <input id="mLoc" placeholder="地點（Google Maps 用）" class="w-full p-2 border" />
     <input id="mTime" placeholder="時間" class="w-full p-2 border" />
     <input id="mTitle" placeholder="景點" class="w-full p-2 border" />
     <input id="mTransport" placeholder="前往方式" class="w-full p-2 border" />
@@ -66,55 +63,32 @@
 </div>
 
 <script>
-// ================= FIREBASE CONFIG（請填你的） =================
+// ---------- Cloud Sync (Firebase) ----------
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_AUTH_DOMAIN",
-  projectId: "YOUR_PROJECT_ID",
+  apiKey: "YOUR_KEY",
+  authDomain: "YOUR_DOMAIN",
+  projectId: "YOUR_PROJECT",
 };
 
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
-const auth = firebase.auth();
 const docRef = db.collection("planner").doc("yesung2026");
 
-// ================= STATE =================
+// ---------- Data ----------
 let data = { days:[{name:'Day 1',items:[]}] };
-let currentDay = 0;
-let editIndex = null;
+let currentDay=0;
+let editIndex=null;
 
-// ================= AUTH (anonymous) =================
-async function initAuth(){
-  return new Promise(res=>{
-    auth.signInAnonymously()
-      .then(()=>res())
-      .catch(err=>{
-        console.log(err);
-        res();
-      });
-  });
-}
-
-// ================= CLOUD SYNC =================
 async function loadCloud(){
   const doc = await docRef.get();
   if(doc.exists){
     data = doc.data();
-    status("同步成功（雲端載入）");
-  } else {
-    status("首次建立雲端資料");
-    await docRef.set(data);
+    render();
   }
 }
 
 function syncCloud(){
-  docRef.set(data)
-    .then(()=>status("已同步到雲端"))
-    .catch(()=>status("同步失敗（檢查Firebase設定）"));
-}
-
-function status(t){
-  document.getElementById("status").innerText = "同步狀態：" + t;
+  docRef.set(data);
 }
 
 function save(){
@@ -122,7 +96,6 @@ function save(){
   syncCloud();
 }
 
-// ================= RENDER =================
 function renderTabs(){
   const el=document.getElementById('dayTabs');
   el.innerHTML='';
@@ -146,25 +119,25 @@ function render(){
   box.innerHTML='';
 
   const list=document.createElement('div');
+  list.id='list';
 
   data.days[currentDay].items.forEach((item,i)=>{
     const div=document.createElement('div');
     div.className='card flex gap-3 p-3 border-b';
-
-    const transport = item.transport ? `<div class="text-xs muted">🚗 ${item.transport}</div>` : '';
-    const note = item.note ? `<div class="text-xs muted">${item.note}</div>` : '';
-    const nav = item.loc ? `<button onclick="openMap('${item.loc}')" class="text-xs underline">導航</button>` : '';
+    div.dataset.id=i;
 
     div.innerHTML=`
       <div class="w-14 h-14 border flex items-center justify-center text-xs font-semibold">
-        ${item.time||'--:--'}
+        ${item.time || '--:--'}
       </div>
+
       <div class="flex-1">
         <div class="font-semibold text-sm">${item.title||''}</div>
-        ${transport}
-        ${note}
-        ${nav}
+        <div class="text-xs muted">🚗 ${item.transport||''}</div>
+        <div class="text-xs muted">${item.note||''}</div>
+        <button onclick="openMap('${item.loc||item.title}')" class="text-xs underline">導航</button>
       </div>
+
       <div class="text-xs flex flex-col gap-1">
         <button onclick="openModal(${i})">編輯</button>
         <button onclick="deleteItem(${i})">刪</button>
@@ -176,12 +149,15 @@ function render(){
 
   box.appendChild(list);
 
-  Sortable.create(list,{animation:150,onEnd:e=>{
-    const arr=data.days[currentDay].items;
-    const moved=arr.splice(e.oldIndex,1)[0];
-    arr.splice(e.newIndex,0,moved);
-    save();render();
-  }});
+  Sortable.create(list,{
+    animation:150,
+    onEnd:function(evt){
+      const arr=data.days[currentDay].items;
+      const moved=arr.splice(evt.oldIndex,1)[0];
+      arr.splice(evt.newIndex,0,moved);
+      save();render();
+    }
+  });
 
   const add=document.createElement('button');
   add.className='w-full mt-3 border py-2';
@@ -190,7 +166,10 @@ function render(){
   box.appendChild(add);
 }
 
-// ================= ACTIONS =================
+function openMap(q){
+  window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`);
+}
+
 function addDay(){
   data.days.push({name:`Day ${data.days.length+1}`,items:[]});
   save();render();
@@ -201,11 +180,6 @@ function deleteItem(i){
   save();render();
 }
 
-function openMap(q){
-  window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`);
-}
-
-// ================= MODAL =================
 function openModal(i=null){
   editIndex=i;
   modal.classList.remove('hidden');
@@ -235,7 +209,6 @@ function saveModal(){
   save();closeModal();render();
 }
 
-// ================= EXPORT =================
 function exportImage(){
   html2canvas(document.getElementById('planner')).then(c=>{
     const a=document.createElement('a');
@@ -250,14 +223,8 @@ function exportAll(){
   });
 }
 
-// ================= INIT =================
-async function init(){
-  await initAuth();
-  await loadCloud();
-  render();
-}
-
-init();
+loadCloud();
+render();
 </script>
 
 </body>
