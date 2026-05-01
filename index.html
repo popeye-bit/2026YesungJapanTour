@@ -85,9 +85,22 @@ function status(t){
 }
 
 // ====== SAVE ======
+let syncTimer;
+
 function save(){
-  saveCloud();
-  render();
+  // 1️⃣ 先存本機（超快，不會卡）
+  localStorage.setItem('planner', JSON.stringify(data));
+
+  // 2️⃣ 更新狀態提示
+  status("等待同步...");
+
+  // 3️⃣ 清掉上一次的延遲同步
+  clearTimeout(syncTimer);
+
+  // 4️⃣ 延遲 1.2 秒後才打雲端（避免卡頓）
+  syncTimer = setTimeout(async () => {
+    await saveCloud();
+  }, 1200);
 }
 
 // ====== UI ======
