@@ -13,6 +13,11 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+
   <style>
     body { background:#fff; }
     .card { touch-action: manipulation; }
@@ -26,8 +31,9 @@
 
   <div class="flex justify-between items-center mb-3">
     <h1 class="text-lg font-semibold">2026藝聲日巡｜大阪、名古屋行程表</h1>
-    <button onclick="shareLink()" class="border px-2 py-1 text-sm">分享</button>
   </div>
+
+  <div id="status" class="text-xs muted mb-2">同步狀態：連線中...</div>
 
   <div id="dayTabs" class="flex gap-2 overflow-x-auto mb-3"></div>
   <button onclick="addDay()" class="mb-3 px-3 py-1 border">+ 新增天數</button>
@@ -60,69 +66,63 @@
 </div>
 
 <script>
-// ---------------- IndexedDB (Offline Storage) ----------------
-const DB_NAME = "yesungPlanner";
-let db;
+// ================= FIREBASE CONFIG（請填你的） =================
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_AUTH_DOMAIN",
+  projectId: "YOUR_PROJECT_ID",
+};
 
-function openDB(){
-  return new Promise((res)=>{
-    const req = indexedDB.open(DB_NAME,1);
-    req.onupgradeneeded = e => {
-      e.target.result.createObjectStore("data");
-    };
-    req.onsuccess = e => { db = e.target.result; res(); };
-  });
-}
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+const auth = firebase.auth();
+const docRef = db.collection("planner").doc("yesung2026");
 
-function saveDB(data){
-  const tx = db.transaction("data","readwrite");
-  tx.objectStore("data").put(data,"planner");
-}
-
-function loadDB(){
-  return new Promise(res=>{
-    const tx=db.transaction("data");
-    const req=tx.objectStore("data").get("planner");
-    req.onsuccess=()=>res(req.result);
-  });
-}
-
-// ---------------- Data ----------------
+// ================= STATE =================
 let data = { days:[{name:'Day 1',items:[]}] };
-let currentDay=0;
-let editIndex=null;
+let currentDay = 0;
+let editIndex = null;
 
-async function init(){
-  await openDB();
+// ================= AUTH (anonymous) =================
+async function initAuth(){
+  return new Promise(res=>{
+    auth.signInAnonymously()
+      .then(()=>res())
+      .catch(err=>{
+        console.log(err);
+        res();
+      });
+  });
+}
 
-  const saved = await loadDB();
-  if(saved) data = saved;
-
-  // restore from share link
-  const hash = location.hash.replace('#','');
-  if(hash){
-    try{
-      data = JSON.parse(atob(hash));
-    }catch(e){}
+// ================= CLOUD SYNC =================
+async function loadCloud(){
+  const doc = await docRef.get();
+  if(doc.exists){
+    data = doc.data();
+    status("同步成功（雲端載入）");
+  } else {
+    status("首次建立雲端資料");
+    await docRef.set(data);
   }
-
-  render();
-  registerSW();
 }
 
-function persist(){
-  saveDB(data);
+function syncCloud(){
+  docRef.set(data)
+    .then(()=>status("已同步到雲端"))
+    .catch(()=>status("同步失敗（檢查Firebase設定）"));
 }
 
-// ---------------- Share Link ----------------
-function shareLink(){
-  const encoded = btoa(JSON.stringify(data));
-  const url = location.origin + location.pathname + "#" + encoded;
-  navigator.clipboard.writeText(url);
-  alert("已複製分享連結");
+function status(t){
+  document.getElementById("status").innerText = "同步狀態：" + t;
 }
 
-// ---------------- Render ----------------
+function save(){
+  localStorage.setItem('planner',JSON.stringify(data));
+  syncCloud();
+}
+
+// ================= RENDER =================
 function renderTabs(){
   const el=document.getElementById('dayTabs');
   el.innerHTML='';
@@ -132,7 +132,7 @@ function renderTabs(){
     input.value=d.name;
     input.className=`px-2 py-1 border text-sm ${i===currentDay?'bg-black text-white':'bg-white'}`;
 
-    input.onchange=e=>{d.name=e.target.value;persist();};
+    input.onchange=e=>{d.name=e.target.value;save();};
     input.onclick=()=>{currentDay=i;render();};
 
     el.appendChild(input);
@@ -159,14 +159,12 @@ function render(){
       <div class="w-14 h-14 border flex items-center justify-center text-xs font-semibold">
         ${item.time||'--:--'}
       </div>
-
       <div class="flex-1">
         <div class="font-semibold text-sm">${item.title||''}</div>
         ${transport}
         ${note}
         ${nav}
       </div>
-
       <div class="text-xs flex flex-col gap-1">
         <button onclick="openModal(${i})">編輯</button>
         <button onclick="deleteItem(${i})">刪</button>
@@ -182,7 +180,7 @@ function render(){
     const arr=data.days[currentDay].items;
     const moved=arr.splice(e.oldIndex,1)[0];
     arr.splice(e.newIndex,0,moved);
-    persist();render();
+    save();render();
   }});
 
   const add=document.createElement('button');
@@ -192,22 +190,22 @@ function render(){
   box.appendChild(add);
 }
 
-// ---------------- Actions ----------------
+// ================= ACTIONS =================
 function addDay(){
   data.days.push({name:`Day ${data.days.length+1}`,items:[]});
-  persist();render();
+  save();render();
 }
 
 function deleteItem(i){
   data.days[currentDay].items.splice(i,1);
-  persist();render();
+  save();render();
 }
 
 function openMap(q){
   window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`);
 }
 
-// ---------------- Modal ----------------
+// ================= MODAL =================
 function openModal(i=null){
   editIndex=i;
   modal.classList.remove('hidden');
@@ -234,10 +232,10 @@ function saveModal(){
   if(editIndex!==null) data.days[currentDay].items[editIndex]=obj;
   else data.days[currentDay].items.push(obj);
 
-  persist();closeModal();render();
+  save();closeModal();render();
 }
 
-// ---------------- Export ----------------
+// ================= EXPORT =================
 function exportImage(){
   html2canvas(document.getElementById('planner')).then(c=>{
     const a=document.createElement('a');
@@ -252,20 +250,13 @@ function exportAll(){
   });
 }
 
-// ---------------- PWA Service Worker ----------------
-function registerSW(){
-  const sw = `
-    self.addEventListener('install',e=>self.skipWaiting());
-    self.addEventListener('fetch',e=>{
-      e.respondWith(fetch(e.request).catch(()=>caches.match(e.request)));
-    });
-  `;
-
-  const blob=new Blob([sw],{type:'application/javascript'});
-  navigator.serviceWorker.register(URL.createObjectURL(blob));
+// ================= INIT =================
+async function init(){
+  await initAuth();
+  await loadCloud();
+  render();
 }
 
-// ---------------- Init ----------------
 init();
 </script>
 
