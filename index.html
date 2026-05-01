@@ -5,17 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>2026藝聲日巡行程表</title>
 
-  <!-- PWA -->
-  <link rel="manifest" id="manifest">
-  <meta name="theme-color" content="#000000">
-
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
-
-  <!-- Firebase (Cloud Sync) -->
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 
   <style>
     body { background:#fff; }
@@ -48,7 +40,7 @@
 <div id="modal" class="fixed inset-0 hidden items-center justify-center bg-black/40 p-4">
   <div class="bg-white w-full max-w-sm p-4 border space-y-2">
 
-    <input id="mLoc" placeholder="地點（Google Maps 用）" class="w-full p-2 border" />
+    <input id="mLoc" placeholder="地點（Google Maps）" class="w-full p-2 border" />
     <input id="mTime" placeholder="時間" class="w-full p-2 border" />
     <input id="mTitle" placeholder="景點" class="w-full p-2 border" />
     <input id="mTransport" placeholder="前往方式" class="w-full p-2 border" />
@@ -63,37 +55,14 @@
 </div>
 
 <script>
-// ---------- Cloud Sync (Firebase) ----------
-const firebaseConfig = {
-  apiKey: "YOUR_KEY",
-  authDomain: "YOUR_DOMAIN",
-  projectId: "YOUR_PROJECT",
-};
-
-firebase.initializeApp(firebaseConfig);
-const db = firebase.firestore();
-const docRef = db.collection("planner").doc("yesung2026");
 
 // ---------- Data ----------
-let data = { days:[{name:'Day 1',items:[]}] };
-let currentDay=0;
-let editIndex=null;
-
-async function loadCloud(){
-  const doc = await docRef.get();
-  if(doc.exists){
-    data = doc.data();
-    render();
-  }
-}
-
-function syncCloud(){
-  docRef.set(data);
-}
+let data = JSON.parse(localStorage.getItem('planner') || JSON.stringify({ days:[{name:'Day 1',items:[]}] }));
+let currentDay = 0;
+let editIndex = null;
 
 function save(){
-  localStorage.setItem('planner',JSON.stringify(data));
-  syncCloud();
+  localStorage.setItem('planner', JSON.stringify(data));
 }
 
 function renderTabs(){
@@ -119,12 +88,26 @@ function render(){
   box.innerHTML='';
 
   const list=document.createElement('div');
-  list.id='list';
 
   data.days[currentDay].items.forEach((item,i)=>{
     const div=document.createElement('div');
     div.className='card flex gap-3 p-3 border-b';
-    div.dataset.id=i;
+
+    const transportHTML = item.transport?.trim()
+      ? `<div class="text-xs muted">🚗 ${item.transport}</div>`
+      : '';
+
+    const noteHTML = item.note?.trim()
+      ? `<div class="text-xs muted">${item.note}</div>`
+      : '';
+
+    const navHTML = item.loc?.trim()
+      ? `<button onclick="openMap('${item.loc}')" class="text-xs underline">導航</button>`
+      : '';
+
+    const titleHTML = item.title?.trim()
+      ? `<div class="font-semibold text-sm">${item.title}</div>`
+      : '';
 
     div.innerHTML=`
       <div class="w-14 h-14 border flex items-center justify-center text-xs font-semibold">
@@ -132,10 +115,10 @@ function render(){
       </div>
 
       <div class="flex-1">
-        <div class="font-semibold text-sm">${item.title||''}</div>
-        <div class="text-xs muted">🚗 ${item.transport||''}</div>
-        <div class="text-xs muted">${item.note||''}</div>
-        <button onclick="openMap('${item.loc||item.title}')" class="text-xs underline">導航</button>
+        ${titleHTML}
+        ${transportHTML}
+        ${noteHTML}
+        ${navHTML}
       </div>
 
       <div class="text-xs flex flex-col gap-1">
@@ -149,15 +132,12 @@ function render(){
 
   box.appendChild(list);
 
-  Sortable.create(list,{
-    animation:150,
-    onEnd:function(evt){
-      const arr=data.days[currentDay].items;
-      const moved=arr.splice(evt.oldIndex,1)[0];
-      arr.splice(evt.newIndex,0,moved);
-      save();render();
-    }
-  });
+  Sortable.create(list,{animation:150,onEnd:e=>{
+    const arr=data.days[currentDay].items;
+    const moved=arr.splice(e.oldIndex,1)[0];
+    arr.splice(e.newIndex,0,moved);
+    save();render();
+  }});
 
   const add=document.createElement('button');
   add.className='w-full mt-3 border py-2';
@@ -223,7 +203,6 @@ function exportAll(){
   });
 }
 
-loadCloud();
 render();
 </script>
 
